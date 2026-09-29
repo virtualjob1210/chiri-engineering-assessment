@@ -6,7 +6,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdownKeymap, markdownLanguage, pasteURLAsLink } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
-import { EditorView, keymap, placeholder, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { drawSelection, EditorView, keymap, placeholder, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 
 const markdownStyle = HighlightStyle.define([
@@ -47,6 +47,14 @@ const documentTheme = EditorView.theme({
   '.cm-line': {
     padding: '0',
   },
+  // Drawn selection (see drawSelection below) stays visible, softer, when
+  // focus moves to the AI command panel.
+  '.cm-selectionBackground': {
+    background: 'var(--selection-blur)',
+  },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+    background: 'var(--selection)',
+  },
   '.cm-placeholder': {
     color: 'var(--muted)',
   },
@@ -82,6 +90,24 @@ export function autosave(save: (doc: string) => void, delayMs = 400): Extension 
   })
 }
 
+/**
+ * Ctrl/Cmd+K invokes the AI command. Always consumes the key, even with an
+ * empty selection, so the browser's own Ctrl+K (focus search bar) never fires
+ * while writing.
+ */
+export function aiCommandKeymap(onInvoke: (view: EditorView) => void): Extension {
+  return keymap.of([
+    {
+      key: 'Mod-k',
+      preventDefault: true,
+      run: (view) => {
+        onInvoke(view)
+        return true
+      },
+    },
+  ])
+}
+
 /** Base extensions for the document editor. */
 export function documentExtensions(): Extension[] {
   return [
@@ -93,6 +119,8 @@ export function documentExtensions(): Extension[] {
     markdownLanguage,
     pasteURLAsLink,
     syntaxHighlighting(markdownStyle),
+    // Keeps the selection visible while focus is in the AI command panel.
+    drawSelection(),
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ spellcheck: 'true', 'aria-label': 'Document editor' }),
     placeholder('Start writing in Markdown…'),

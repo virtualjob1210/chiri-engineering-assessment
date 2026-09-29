@@ -3,16 +3,11 @@
 // adapter (suggestPlugin.ts) owns reading requests and writing responses.
 
 import type { ApiError, ApiErrorCode, RefinementTurn, SuggestRequest, SuggestResponse } from '../shared/api.ts'
+import { SUGGEST_LIMITS } from '../shared/limits.ts'
 import { OpenRouterError, type CompleteFn } from './openrouter.ts'
 import { buildMessages, parseModelReply } from './prompt.ts'
 
-export const LIMITS = {
-  instruction: 500,
-  selection: 8_000,
-  contextSide: 4_000,
-  heading: 200,
-  historyTurns: 10,
-} as const
+export const LIMITS = SUGGEST_LIMITS
 
 export interface HandlerResult {
   status: number
