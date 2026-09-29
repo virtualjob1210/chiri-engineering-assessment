@@ -1,27 +1,25 @@
 import type { EditorView, ViewUpdate } from '@codemirror/view'
 import { useRef, useState } from 'react'
-import type { SuggestRequest, SuggestResponse } from '../shared/api.ts'
+import type { SuggestRequest } from '../shared/api.ts'
 import { SUGGEST_LIMITS } from '../shared/limits.ts'
 import { SelectionToolbar } from './components/SelectionToolbar.tsx'
-import { SuggestionDebugPanel } from './components/SuggestionDebugPanel.tsx'
+import { SuggestionCard } from './components/SuggestionCard.tsx'
 import { Editor } from './editor/Editor.tsx'
 import { aiCommandKeymap, autosave } from './editor/extensions.ts'
+import {
+  acceptSuggestion,
+  clearSuggestion,
+  getSuggestion,
+  rejectSuggestion,
+  resolveSuggestion,
+  startSuggestion,
+  suggestionExtension,
+  type Suggestion,
+} from './editor/suggestionField.ts'
 import { fetchSuggestion } from './lib/apiClient.ts'
 import { extractContext, trimRange, type TextRange } from './lib/context.ts'
 import { loadDocument, saveDocument } from './lib/storage.ts'
 import { SAMPLE_DOC } from './sampleDoc.ts'
-
-/** Snapshot of what the user asked about, frozen at submit time. */
-interface SuggestionTarget extends TextRange {
-  original: string
-  instruction: string
-}
-
-type RequestState =
-  | { status: 'idle' }
-  | { status: 'loading'; target: SuggestionTarget }
-  | { status: 'error'; message: string }
-  | { status: 'done'; target: SuggestionTarget; suggestion: SuggestResponse }
 
 /** Current selection trimmed of surrounding whitespace, or null if none. */
 function readSelection(view: EditorView): TextRange | null {
@@ -37,84 +35,105 @@ export default function App() {
   const [selection, setSelection] = useState<TextRange | null>(null)
   const [editorFocused, setEditorFocused] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
-  const [request, setRequest] = useState<RequestState>({ status: 'idle' })
-  const abortRef = useRef<AbortController | null>(null)
+  const [commandError, setCommandError] = useState<string | null>(null)
+  // Mirror of the editor's suggestion field; CodeMirror remains the owner.
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
+  // The in-flight request, if any. A ref because it's only read in callbacks.
+  const pendingRef = useRef<{ id: number; controller: AbortController } | null>(null)
+  const nextIdRef = useRef(1)
 
   // Created once: the editor reads its extensions only at mount. State
   // setters are stable, so capturing them here is safe.
   const [editorExtensions] = useState(() => [
     autosave((doc) => saveDocument(doc)),
+    suggestionExtension,
     aiCommandKeymap((v) => {
       if (readSelection(v)) setCommandOpen(true)
     }),
   ])
 
-  const loading = request.status === 'loading'
+  const loading = suggestion?.status === 'pending'
 
   const handleUpdate = (update: ViewUpdate) => {
+    const next = getSuggestion(update.state)
+    if (next !== getSuggestion(update.startState)) {
+      setSuggestion(next)
+      // Pending suggestion rejected or replaced: stop paying for the request.
+      if (pendingRef.current && next?.id !== pendingRef.current.id) {
+        pendingRef.current.controller.abort()
+        pendingRef.current = null
+        setCommandOpen(false)
+      }
+    }
+
     if (!update.selectionSet && !update.docChanged && !update.focusChanged) return
-    const next = readSelection(update.view)
-    setSelection((prev) => (sameRange(prev, next) ? prev : next))
+    setSelection((prev) => {
+      const range = readSelection(update.view)
+      return sameRange(prev, range) ? prev : range
+    })
     setEditorFocused(update.view.hasFocus)
-    // Moving the selection dismisses an open (idle) command; an in-flight
-    // request keeps its own snapshot and stays put.
-    if ((update.selectionSet || update.docChanged) && !loading) {
+    // Moving the selection dismisses an idle command panel.
+    if ((update.selectionSet || update.docChanged) && !pendingRef.current) {
       setCommandOpen(false)
-      if (request.status === 'error') setRequest({ status: 'idle' })
+      setCommandError(null)
     }
   }
 
   const closeCommand = () => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    if (request.status !== 'done') setRequest({ status: 'idle' })
+    if (view && pendingRef.current) rejectSuggestion(view) // cancels via handleUpdate
     setCommandOpen(false)
+    setCommandError(null)
     view?.focus()
   }
 
   const submit = async (instruction: string) => {
-    if (!view || loading) return
+    if (!view || pendingRef.current) return
     const range = readSelection(view)
     if (!range) return
 
-    const { state } = view
-    const original = state.sliceDoc(range.from, range.to)
+    const original = view.state.sliceDoc(range.from, range.to)
     if (original.length > SUGGEST_LIMITS.selection) {
-      setRequest({
-        status: 'error',
-        message: `Selection is too long (max ${SUGGEST_LIMITS.selection.toLocaleString()} characters).`,
-      })
+      setCommandError(`Selection is too long (max ${SUGGEST_LIMITS.selection.toLocaleString()} characters).`)
       return
     }
 
-    const target: SuggestionTarget = { ...range, original, instruction }
     const body: SuggestRequest = {
       instruction,
       selection: original,
-      context: extractContext(state.doc.toString(), range.from, range.to),
+      context: extractContext(view.state.doc.toString(), range.from, range.to),
       history: [],
     }
 
+    // Record the target in editor state first so its range is mapped through
+    // any edits made while the request is in flight.
+    const id = nextIdRef.current++
+    view.dispatch({ effects: startSuggestion.of({ id, ...range, original, instruction }) })
     const controller = new AbortController()
-    abortRef.current = controller
-    setRequest({ status: 'loading', target })
+    pendingRef.current = { id, controller }
+    setCommandError(null)
 
     const result = await fetchSuggestion(body, controller.signal)
-    if (abortRef.current !== controller) return // cancelled or superseded
-    abortRef.current = null
+    if (pendingRef.current?.id !== id) return // cancelled or superseded
+    pendingRef.current = null
 
     if (result.ok) {
-      console.info('[suggest]', { target, suggestion: result.suggestion })
-      setRequest({ status: 'done', target, suggestion: result.suggestion })
+      const { replacement, rationale } = result.suggestion
+      const current = getSuggestion(view.state)
+      view.dispatch({
+        effects: resolveSuggestion.of({ id, replacement, rationale }),
+        // Collapse the selection so the inline diff isn't hidden under it.
+        selection: current ? { anchor: current.to } : undefined,
+      })
       setCommandOpen(false)
       view.focus()
-    } else if (!result.aborted) {
-      setRequest({ status: 'error', message: result.message })
+    } else {
+      view.dispatch({ effects: clearSuggestion.of(null) })
+      if (!result.aborted) setCommandError(result.message)
     }
   }
 
-  // While loading, anchor to the frozen snapshot, not the live selection.
-  const anchor = loading ? request.target : selection
+  // While a request runs, the panel follows the (mapped) pending range.
+  const anchor = loading ? suggestion : selection
   const showToolbar = view && anchor && (loading || commandOpen || editorFocused)
 
   return (
@@ -129,25 +148,25 @@ export default function App() {
         <Editor initialDoc={initialDoc} extensions={editorExtensions} onViewChange={setView} onUpdate={handleUpdate} />
       </main>
 
+      {view && suggestion?.status === 'ready' && (
+        <SuggestionCard
+          view={view}
+          suggestion={suggestion}
+          onAccept={() => acceptSuggestion(view)}
+          onReject={() => rejectSuggestion(view)}
+        />
+      )}
+
       {showToolbar && (
         <SelectionToolbar
           view={view}
           range={anchor}
           open={commandOpen || loading}
           busy={loading}
-          error={request.status === 'error' ? request.message : null}
+          error={commandError}
           onOpen={() => setCommandOpen(true)}
           onClose={closeCommand}
           onSubmit={submit}
-        />
-      )}
-
-      {request.status === 'done' && (
-        <SuggestionDebugPanel
-          instruction={request.target.instruction}
-          original={request.target.original}
-          suggestion={request.suggestion}
-          onDismiss={() => setRequest({ status: 'idle' })}
         />
       )}
     </div>

@@ -1,13 +1,13 @@
 // Contextual AI entry point anchored to the current selection.
 // Two states: a small "Ask AI" hint while text is selected, and the command
-// panel (instruction field + quick actions) once opened. Position is read
-// from CodeMirror and applied straight to the DOM, so scrolling doesn't
-// trigger React renders.
+// panel (instruction field + quick actions) once opened.
 
 import type { EditorView } from '@codemirror/view'
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import { SUGGEST_LIMITS } from '../../shared/limits.ts'
 import type { TextRange } from '../lib/context.ts'
+import { MOD } from '../lib/keys.ts'
+import { useAnchoredPosition } from './useAnchoredPosition.ts'
 
 const QUICK_ACTIONS = [
   { label: 'Shorten', instruction: "Make this more concise. Keep the key points and the author's voice." },
@@ -15,62 +15,6 @@ const QUICK_ACTIONS = [
   { label: 'More formal', instruction: 'Rewrite this in a more formal, professional tone.' },
   { label: 'Fix grammar', instruction: 'Fix spelling, grammar and punctuation only. Do not otherwise change the wording.' },
 ] as const
-
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
-const SHORTCUT_LABEL = IS_MAC ? '⌘K' : 'Ctrl+K'
-
-const GAP = 8
-const EDGE = 8
-
-/**
- * Pins `elementRef` below the range (or above it if there's no room) and
- * keeps it there while the editor scrolls or the window resizes. Hidden
- * when the range is scrolled out of the editor's visible area.
- */
-function useAnchoredPosition(
-  view: EditorView,
-  range: TextRange,
-  elementRef: RefObject<HTMLElement | null>,
-  layoutKey: string,
-) {
-  useLayoutEffect(() => {
-    const el = elementRef.current
-    if (!el) return
-    let frame = 0
-
-    const place = () => {
-      frame = 0
-      const start = view.coordsAtPos(range.from, 1)
-      const end = view.coordsAtPos(range.to, -1)
-      const visible = view.scrollDOM.getBoundingClientRect()
-      if (!start || !end || end.bottom < visible.top || start.top > visible.bottom) {
-        el.style.visibility = 'hidden'
-        return
-      }
-
-      const { offsetWidth: width, offsetHeight: height } = el
-      let top = end.bottom + GAP
-      if (top + height > window.innerHeight - EDGE) top = start.top - height - GAP
-      top = Math.max(EDGE, top)
-      const left = Math.max(EDGE, Math.min(Math.min(start.left, end.left), window.innerWidth - width - EDGE))
-
-      el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`
-      el.style.visibility = 'visible'
-    }
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(place)
-    }
-
-    place()
-    view.scrollDOM.addEventListener('scroll', schedule, { passive: true })
-    window.addEventListener('resize', schedule)
-    return () => {
-      cancelAnimationFrame(frame)
-      view.scrollDOM.removeEventListener('scroll', schedule)
-      window.removeEventListener('resize', schedule)
-    }
-  }, [view, range.from, range.to, elementRef, layoutKey])
-}
 
 interface SelectionToolbarProps {
   view: EditorView
@@ -118,7 +62,7 @@ export function SelectionToolbar({ view, range, open, busy, error, onOpen, onClo
           onMouseDown={(event) => event.preventDefault()}
           onClick={onOpen}
         >
-          <span aria-hidden="true">✦</span> Ask AI <kbd>{SHORTCUT_LABEL}</kbd>
+          <span aria-hidden="true">✦</span> Ask AI <kbd>{MOD}K</kbd>
         </button>
       </div>
     )
