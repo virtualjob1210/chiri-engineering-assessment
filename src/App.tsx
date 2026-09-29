@@ -8,15 +8,19 @@ import { Editor } from './editor/Editor.tsx'
 import { aiCommandKeymap, autosave } from './editor/extensions.ts'
 import {
   acceptSuggestion,
-  clearSuggestion,
+  activeRequestId,
+  buildRefineRequest,
+  cancelRefinement,
+  failRequest,
   getSuggestion,
   rejectSuggestion,
   resolveSuggestion,
+  startRefinement,
   startSuggestion,
   suggestionExtension,
   type Suggestion,
 } from './editor/suggestionField.ts'
-import { fetchSuggestion } from './lib/apiClient.ts'
+import { fetchSuggestion, type SuggestResult } from './lib/apiClient.ts'
 import { extractContext, trimRange, type TextRange } from './lib/context.ts'
 import { loadDocument, saveDocument } from './lib/storage.ts'
 import { SAMPLE_DOC } from './sampleDoc.ts'
@@ -38,7 +42,8 @@ export default function App() {
   const [commandError, setCommandError] = useState<string | null>(null)
   // Mirror of the editor's suggestion field; CodeMirror remains the owner.
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
-  // The in-flight request, if any. A ref because it's only read in callbacks.
+  // The in-flight request (initial ask or refinement). A ref because it's
+  // only read in callbacks.
   const pendingRef = useRef<{ id: number; controller: AbortController } | null>(null)
   const nextIdRef = useRef(1)
 
@@ -58,8 +63,9 @@ export default function App() {
     const next = getSuggestion(update.state)
     if (next !== getSuggestion(update.startState)) {
       setSuggestion(next)
-      // Pending suggestion rejected or replaced: stop paying for the request.
-      if (pendingRef.current && next?.id !== pendingRef.current.id) {
+      // The suggestion stopped waiting on our request (rejected, replaced,
+      // cancelled, or went stale): stop paying for it.
+      if (pendingRef.current && activeRequestId(next) !== pendingRef.current.id) {
         pendingRef.current.controller.abort()
         pendingRef.current = null
         setCommandOpen(false)
@@ -72,22 +78,33 @@ export default function App() {
       return sameRange(prev, range) ? prev : range
     })
     setEditorFocused(update.view.hasFocus)
-    // Moving the selection dismisses an idle command panel.
-    if ((update.selectionSet || update.docChanged) && !pendingRef.current) {
+    // Moving the selection dismisses the command panel unless it's waiting.
+    if ((update.selectionSet || update.docChanged) && getSuggestion(update.state)?.status !== 'pending') {
       setCommandOpen(false)
       setCommandError(null)
     }
   }
 
   const closeCommand = () => {
-    if (view && pendingRef.current) rejectSuggestion(view) // cancels via handleUpdate
+    // Cancels an in-flight first ask (the request is aborted in handleUpdate).
+    if (view && getSuggestion(view.state)?.status === 'pending') rejectSuggestion(view)
     setCommandOpen(false)
     setCommandError(null)
     view?.focus()
   }
 
+  /** Sends a request; resolves to null if it was cancelled or superseded meanwhile. */
+  const send = async (requestId: number, body: SuggestRequest): Promise<SuggestResult | null> => {
+    const controller = new AbortController()
+    pendingRef.current = { id: requestId, controller }
+    const result = await fetchSuggestion(body, controller.signal)
+    if (pendingRef.current?.id !== requestId) return null
+    pendingRef.current = null
+    return result
+  }
+
   const submit = async (instruction: string) => {
-    if (!view || pendingRef.current) return
+    if (!view || getSuggestion(view.state)?.status === 'pending') return
     const range = readSelection(view)
     if (!range) return
 
@@ -105,31 +122,47 @@ export default function App() {
     }
 
     // Record the target in editor state first so its range is mapped through
-    // any edits made while the request is in flight.
+    // any edits made while the request is in flight. This replaces (and so
+    // cancels) any existing suggestion.
     const id = nextIdRef.current++
     view.dispatch({ effects: startSuggestion.of({ id, ...range, original, instruction }) })
-    const controller = new AbortController()
-    pendingRef.current = { id, controller }
     setCommandError(null)
 
-    const result = await fetchSuggestion(body, controller.signal)
-    if (pendingRef.current?.id !== id) return // cancelled or superseded
-    pendingRef.current = null
+    const result = await send(id, body)
+    if (!result) return
 
     if (result.ok) {
-      const { replacement, rationale } = result.suggestion
       const current = getSuggestion(view.state)
       view.dispatch({
-        effects: resolveSuggestion.of({ id, replacement, rationale }),
+        effects: resolveSuggestion.of({ requestId: id, ...result.suggestion }),
         // Collapse the selection so the inline diff isn't hidden under it.
         selection: current ? { anchor: current.to } : undefined,
       })
       setCommandOpen(false)
       view.focus()
     } else {
-      view.dispatch({ effects: clearSuggestion.of(null) })
-      if (!result.aborted) setCommandError(result.message)
+      view.dispatch({ effects: failRequest.of({ requestId: id, message: result.message }) })
+      setCommandError(result.message)
     }
+  }
+
+  /** Asks the AI to revise the proposal on screen. The document is untouched. */
+  const refine = async (instruction: string) => {
+    if (!view) return
+    const current = getSuggestion(view.state)
+    if (current?.status !== 'ready' || current.stale || current.refinement?.status === 'loading') return
+
+    const requestId = nextIdRef.current++
+    const body = buildRefineRequest(view.state, current, instruction)
+    view.dispatch({ effects: startRefinement.of({ id: current.id, requestId, instruction }) })
+
+    const result = await send(requestId, body)
+    if (!result) return
+    view.dispatch({
+      effects: result.ok
+        ? resolveSuggestion.of({ requestId, ...result.suggestion })
+        : failRequest.of({ requestId, message: result.message }),
+    })
   }
 
   // While a request runs, the panel follows the (mapped) pending range.
@@ -154,6 +187,8 @@ export default function App() {
           suggestion={suggestion}
           onAccept={() => acceptSuggestion(view)}
           onReject={() => rejectSuggestion(view)}
+          onRefine={refine}
+          onCancelRefine={() => view.dispatch({ effects: cancelRefinement.of(null) })}
         />
       )}
 

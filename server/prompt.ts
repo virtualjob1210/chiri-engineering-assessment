@@ -58,7 +58,12 @@ export function buildMessages(request: SuggestRequest): ChatMessage[] {
     })
     messages.push({
       role: 'user',
-      content: `Refine your previous replacement of the original selection. Instruction: ${instructions[i + 1]}`,
+      content: [
+        'Revise your most recent replacement (not the original selection).',
+        'Apply only this change and keep everything else from your latest version:',
+        instructions[i + 1],
+        'Return the complete revised replacement for the original selection, in the same JSON format.',
+      ].join('\n'),
     })
   })
 

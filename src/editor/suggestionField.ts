@@ -15,36 +15,120 @@ import {
   type TransactionSpec,
 } from '@codemirror/state'
 import { Decoration, EditorView, keymap, WidgetType, type DecorationSet } from '@codemirror/view'
+import type { RefinementTurn, SuggestRequest } from '../../shared/api.ts'
+import { extractContext } from '../lib/context.ts'
 import { diffText, type DiffSegment } from '../lib/diff.ts'
 
 interface SuggestionBase {
+  /** Also the request id of the initial ask. */
   id: number
   /** Current position of the original range; mapped through every edit. */
   from: number
   to: number
-  /** Snapshot of the text at request time. */
+  /** Snapshot of the text at request time. Never changes while refining. */
   original: string
   instruction: string
   /** True once an edit has touched the range; Accept is then disabled. */
   stale: boolean
 }
 
+/** Follow-up request state for a ready suggestion. */
+export type Refinement =
+  | { status: 'loading'; requestId: number; instruction: string }
+  | { status: 'error'; instruction: string; message: string }
+
 export type PendingSuggestion = SuggestionBase & { status: 'pending' }
 export type ReadySuggestion = SuggestionBase & {
   status: 'ready'
+  /** Every completed proposal, oldest first. The last one is on screen. */
+  rounds: RefinementTurn[]
+  /** Latest proposal, kept alongside `rounds` for convenient access. */
   replacement: string
   rationale: string
+  /** Diff of the latest proposal against `original`. */
   segments: DiffSegment[]
+  refinement: Refinement | null
 }
 export type Suggestion = PendingSuggestion | ReadySuggestion
 
 // ---- Effects ---------------------------------------------------------------
 
 export const startSuggestion = StateEffect.define<Omit<PendingSuggestion, 'status' | 'stale'>>()
-export const resolveSuggestion = StateEffect.define<{ id: number; replacement: string; rationale: string }>()
+export const startRefinement = StateEffect.define<{ id: number; requestId: number; instruction: string }>()
+/** A response for the initial ask or a refinement, matched by request id. */
+export const resolveSuggestion = StateEffect.define<{ requestId: number; replacement: string; rationale: string }>()
+/** A failed request: drops a pending suggestion, or keeps the last proposal on a refinement. */
+export const failRequest = StateEffect.define<{ requestId: number; message: string }>()
+export const cancelRefinement = StateEffect.define<null>()
 export const clearSuggestion = StateEffect.define<null>()
 
 // ---- Pure state logic --------------------------------------------------------
+
+/** Id of the request this suggestion is waiting on, if any. */
+export function activeRequestId(suggestion: Suggestion | null): number | null {
+  if (!suggestion) return null
+  if (suggestion.status === 'pending') return suggestion.id
+  return suggestion.refinement?.status === 'loading' ? suggestion.refinement.requestId : null
+}
+
+function withProposal(base: Suggestion, rounds: RefinementTurn[]): ReadySuggestion {
+  const { replacement, rationale } = rounds[rounds.length - 1]
+  return {
+    ...base,
+    status: 'ready',
+    rounds,
+    replacement,
+    rationale,
+    segments: diffText(base.original, replacement),
+    refinement: null,
+  }
+}
+
+function applyEffect(suggestion: Suggestion | null, effect: StateEffect<unknown>): Suggestion | null {
+  if (effect.is(startSuggestion)) return { ...effect.value, status: 'pending', stale: false }
+  if (effect.is(clearSuggestion)) return null
+  if (!suggestion) return null
+
+  if (effect.is(startRefinement)) {
+    const { id, requestId, instruction } = effect.value
+    if (suggestion.id !== id || suggestion.status !== 'ready' || suggestion.stale) return suggestion
+    return { ...suggestion, refinement: { status: 'loading', requestId, instruction } }
+  }
+
+  // Responses for anything other than the current request are ignored.
+  const waitingOn = activeRequestId(suggestion)
+  if (effect.is(resolveSuggestion) && effect.value.requestId === waitingOn) {
+    const { replacement, rationale } = effect.value
+    if (suggestion.status === 'pending') {
+      return withProposal(suggestion, [{ instruction: suggestion.instruction, replacement, rationale }])
+    }
+    const instruction = suggestion.refinement!.instruction
+    return withProposal(suggestion, [...suggestion.rounds, { instruction, replacement, rationale }])
+  }
+  if (effect.is(failRequest) && effect.value.requestId === waitingOn) {
+    if (suggestion.status === 'pending') return null
+    const instruction = suggestion.refinement!.instruction
+    return { ...suggestion, refinement: { status: 'error', instruction, message: effect.value.message } }
+  }
+  if (effect.is(cancelRefinement) && suggestion.status === 'ready') {
+    return { ...suggestion, refinement: null }
+  }
+  return suggestion
+}
+
+/**
+ * Request body for refining the on-screen proposal. The selection is always
+ * the original text; `history` carries every proposal so far, so the model
+ * revises its latest version instead of starting over.
+ */
+export function buildRefineRequest(state: EditorState, suggestion: ReadySuggestion, instruction: string): SuggestRequest {
+  return {
+    instruction,
+    selection: suggestion.original,
+    context: extractContext(state.doc.toString(), suggestion.from, suggestion.to),
+    history: suggestion.rounds,
+  }
+}
 
 /**
  * Maps a suggestion through a document change. Edits strictly outside the
@@ -66,26 +150,11 @@ export const suggestionField = StateField.define<Suggestion | null>({
   create: () => null,
   update(value, tr) {
     let suggestion = value && tr.docChanged ? mapSuggestion(value, tr.changes) : value
-
-    for (const effect of tr.effects) {
-      if (effect.is(startSuggestion)) {
-        suggestion = { ...effect.value, status: 'pending', stale: false }
-      } else if (effect.is(resolveSuggestion)) {
-        // Ignore responses for a suggestion that was replaced or cleared.
-        if (suggestion?.id === effect.value.id) {
-          const { replacement, rationale } = effect.value
-          suggestion = {
-            ...suggestion,
-            status: 'ready',
-            replacement,
-            rationale,
-            segments: diffText(suggestion.original, replacement),
-          }
-        }
-      } else if (effect.is(clearSuggestion)) {
-        suggestion = null
-      }
+    // A stale passage can't be accepted, so an in-flight refinement is moot.
+    if (suggestion?.status === 'ready' && suggestion.stale && suggestion.refinement) {
+      suggestion = { ...suggestion, refinement: null }
     }
+    for (const effect of tr.effects) suggestion = applyEffect(suggestion, effect)
     return suggestion
   },
   provide: (field) => EditorView.decorations.from(field, buildDecorations),
@@ -159,6 +228,7 @@ class InsertionWidget extends WidgetType {
 const pendingMark = Decoration.mark({ class: 'cm-suggest-pending' })
 const staleMark = Decoration.mark({ class: 'cm-suggest-stale' })
 const rangeMark = Decoration.mark({ class: 'cm-suggest-range' })
+const refiningRangeMark = Decoration.mark({ class: 'cm-suggest-range cm-suggest-refining' })
 const deleteMark = Decoration.mark({ class: 'cm-diff-delete' })
 
 function buildDecorations(suggestion: Suggestion | null): DecorationSet {
@@ -169,7 +239,9 @@ function buildDecorations(suggestion: Suggestion | null): DecorationSet {
   // Offsets into the original no longer line up once the text was edited.
   if (suggestion.stale) return Decoration.set(staleMark.range(from, to))
 
-  const ranges = [rangeMark.range(from, to)]
+  // The current diff stays visible while a refinement runs, gently pulsing.
+  const refining = suggestion.refinement?.status === 'loading'
+  const ranges = [(refining ? refiningRangeMark : rangeMark).range(from, to)]
   let pos = from
   for (const segment of suggestion.segments) {
     if (segment.kind === 'insert') {
@@ -192,6 +264,12 @@ const suggestionTheme = EditorView.baseTheme({
   },
   '.cm-suggest-range': {
     backgroundColor: 'var(--suggest-bg)',
+  },
+  '.cm-suggest-refining': {
+    animation: 'cm-suggest-fade 1.4s ease-in-out infinite',
+  },
+  '@keyframes cm-suggest-fade': {
+    '50%': { opacity: '0.55' },
   },
   '.cm-suggest-stale': {
     textDecoration: 'underline dashed var(--muted)',
