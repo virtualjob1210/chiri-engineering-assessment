@@ -1,10 +1,11 @@
 import { isolateHistory } from '@codemirror/commands'
 import type { EditorView, ViewUpdate } from '@codemirror/view'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SuggestRequest } from '../shared/api.ts'
 import { SUGGEST_LIMITS } from '../shared/limits.ts'
 import { SelectionToolbar } from './components/SelectionToolbar.tsx'
 import { SuggestionCard } from './components/SuggestionCard.tsx'
+import { VersionHistory } from './components/VersionHistory.tsx'
 import { Editor } from './editor/Editor.tsx'
 import { aiCommandKeymap, autosave } from './editor/extensions.ts'
 import {
@@ -19,11 +20,13 @@ import {
   resolveSuggestion,
   startRefinement,
   startSuggestion,
+  suggestionAccepted,
   suggestionExtension,
   type Suggestion,
 } from './editor/suggestionField.ts'
 import { fetchSuggestion, type SuggestResult } from './lib/apiClient.ts'
 import { extractContext, trimRange, type TextRange } from './lib/context.ts'
+import { loadHistory, recordAccepts, saveHistory } from './lib/history.ts'
 import { MOD } from './lib/keys.ts'
 import { loadDocument, saveDocument } from './lib/storage.ts'
 import { SAMPLE_DOC } from './sampleDoc.ts'
@@ -45,6 +48,9 @@ export default function App() {
   const [commandError, setCommandError] = useState<string | null>(null)
   // Mirror of the editor's suggestion field; CodeMirror remains the owner.
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
+  const [history, setHistory] = useState(() => loadHistory())
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const historyButtonRef = useRef<HTMLButtonElement>(null)
   // The in-flight request (initial ask or refinement). A ref because it's
   // only read in callbacks.
   const pendingRef = useRef<{ id: number; controller: AbortController } | null>(null)
@@ -62,7 +68,17 @@ export default function App() {
 
   const loading = suggestion?.status === 'pending'
 
+  useEffect(() => {
+    saveHistory(history)
+  }, [history])
+
   const handleUpdate = (update: ViewUpdate) => {
+    // Every accept path produces a transaction tagged with the accepted
+    // suggestion; record those (and nothing else) in version history.
+    if (update.transactions.some((tr) => tr.annotation(suggestionAccepted))) {
+      setHistory((prev) => recordAccepts(prev, update.transactions))
+    }
+
     const next = getSuggestion(update.state)
     if (next !== getSuggestion(update.startState)) {
       setSuggestion(next)
@@ -192,13 +208,34 @@ export default function App() {
         <p className="app-hint">
           Select text → <strong>Ask AI</strong> <kbd>{MOD}K</kbd> → review the changes → accept or refine
         </p>
+        <button
+          ref={historyButtonRef}
+          type="button"
+          className="btn btn-quiet"
+          onClick={() => setHistoryOpen((open) => !open)}
+          aria-expanded={historyOpen}
+          aria-controls="version-history"
+        >
+          Version history{history.length > 0 && <span className="count">{history.length}</span>}
+        </button>
         <button type="button" className="btn btn-quiet" onClick={resetSample} title="Undo with Ctrl/⌘+Z">
           Reset sample
         </button>
       </header>
-      <main className="app-main">
-        <Editor initialDoc={initialDoc} extensions={editorExtensions} onViewChange={setView} onUpdate={handleUpdate} />
-      </main>
+      <div className="app-body">
+        <main className="app-main">
+          <Editor initialDoc={initialDoc} extensions={editorExtensions} onViewChange={setView} onUpdate={handleUpdate} />
+        </main>
+        {historyOpen && (
+          <VersionHistory
+            entries={history}
+            onClose={() => {
+              setHistoryOpen(false)
+              historyButtonRef.current?.focus()
+            }}
+          />
+        )}
+      </div>
 
       {view && suggestion?.status === 'ready' && (
         <SuggestionCard

@@ -10,7 +10,8 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void
 }
 
-function browserStore(): KeyValueStore | null {
+/** `window.localStorage`, or null where it's unavailable or blocked. */
+export function browserStore(): KeyValueStore | null {
   try {
     return window.localStorage
   } catch {

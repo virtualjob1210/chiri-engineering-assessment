@@ -6,6 +6,7 @@
 
 import { isolateHistory } from '@codemirror/commands'
 import {
+  Annotation,
   Prec,
   StateEffect,
   StateField,
@@ -182,6 +183,14 @@ export function canAccept(state: EditorState): boolean {
 }
 
 /**
+ * Attached to the accept transaction, carrying the suggestion as it was when
+ * accepted. Every accept path (keyboard, card button, refine field) goes
+ * through `acceptTransaction`, so observers such as version history can rely
+ * on this single signal. Undo/redo transactions never carry it.
+ */
+export const suggestionAccepted = Annotation.define<ReadySuggestion>()
+
+/**
  * Transaction that applies the suggestion: replaces exactly the original
  * range, clears the suggestion, and is isolated as its own undo step.
  * Returns null if the suggestion can't be applied.
@@ -193,7 +202,7 @@ export function acceptTransaction(state: EditorState): TransactionSpec | null {
     changes: { from: s.from, to: s.to, insert: s.replacement },
     selection: { anchor: s.from + s.replacement.length },
     effects: clearSuggestion.of(null),
-    annotations: isolateHistory.of('full'),
+    annotations: [isolateHistory.of('full'), suggestionAccepted.of(s)],
     userEvent: 'input.ai.accept',
     scrollIntoView: true,
   }

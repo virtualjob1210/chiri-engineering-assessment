@@ -90,10 +90,16 @@ kbd {
   }
 }
 
-/* The editor fills everything below the header and scrolls internally. */
-.app-main {
+/* Editor (and the optional history panel) fill everything below the header. */
+.app-body {
+  display: flex;
   flex: 1;
   min-height: 0;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .editor-host {
@@ -312,4 +318,146 @@ kbd {
 
 .refine-input:focus-visible {
   background: var(--surface);
+}
+
+.count {
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--subtle-bg);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- Version history panel ---------------------------------------------- */
+
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 45vw);
+  padding: 12px 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.history-note,
+.history-empty {
+  margin: 4px 0 12px;
+  color: var(--muted);
+}
+
+.history-empty {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.history-item.is-open {
+  box-shadow: var(--shadow);
+}
+
+.history-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-summary:hover {
+  background: var(--subtle-bg);
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.history-meta time {
+  color: var(--muted);
+}
+
+.history-instruction,
+.history-rationale {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.history-rationale {
+  color: var(--muted);
+}
+
+.history-item.is-open .history-instruction,
+.history-item.is-open .history-rationale {
+  -webkit-line-clamp: unset;
+}
+
+.history-detail {
+  padding: 0 12px 12px;
+}
+
+.history-detail h3 {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.history-text {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--subtle-bg);
+  font: 14px/1.55 var(--font-prose);
+  white-space: pre-wrap;
+}
+
+.history-del {
+  color: var(--delete-fg);
+  background: var(--delete-bg);
+}
+
+.history-ins {
+  color: var(--insert-fg);
+  background: var(--insert-bg);
+  text-decoration: none;
 }

@@ -73,11 +73,13 @@ export function useAnchoredPosition(
 
     place()
     view.scrollDOM.addEventListener('scroll', schedule, { passive: true })
-    window.addEventListener('resize', schedule)
+    // Also covers window resizes and side panels narrowing the editor.
+    const resizeObserver = new ResizeObserver(schedule)
+    resizeObserver.observe(view.scrollDOM)
     return () => {
       cancelAnimationFrame(frame)
       view.scrollDOM.removeEventListener('scroll', schedule)
-      window.removeEventListener('resize', schedule)
+      resizeObserver.disconnect()
     }
   }, [view, range.from, range.to, elementRef, layoutKey, flip])
 }
