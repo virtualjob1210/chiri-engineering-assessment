@@ -1,8 +1,43 @@
 # 02: Scaffolding and OpenRouter API
 
-## Part A: scaffold (commit `41ff1a6`)
+## Prompt 1: scaffold (commit `41ff1a6`)
 
-> Please actually scaffold the project now… Install the MVP dependencies… add .env.example, add .env to .gitignore, add "test": "vitest run", update the TypeScript configs so server and shared are type-checked, remove the default Vite demo content… Keep this step strictly limited to project scaffolding.
+````text
+Use this prompt with Claude:
+Please actually scaffold the project now based on the architecture we agreed on.
+Create the Vite + React + TypeScript app and set up the initial project structure with:
+- server/
+- shared/
+- src/editor/
+- src/components/
+- src/lib/
+- ai-sessions/
+Install the MVP dependencies:
+- @codemirror/state
+- @codemirror/view
+- @codemirror/commands
+- @codemirror/language
+- @codemirror/lang-markdown
+- @lezer/highlight
+- diff
+- vitest
+Also:
+- add .env.example
+- add .env to .gitignore
+- add "test": "vitest run" to package.json
+- update the TypeScript configs so server and shared are type-checked
+- remove the default Vite demo content and assets
+- keep App.tsx as a minimal clean placeholder page
+Do not implement the editor, AI integration, diff logic, or any product features yet.
+I want you to perform the scaffold/setup changes directly, not just describe what commands I should run.
+When finished, show me:
+1. the final folder structure
+2. the files you changed
+3. any commands you ran
+4. whether npm run build succeeds
+5. whether npm test succeeds
+Keep this step strictly limited to project scaffolding.
+````
 
 ### What went wrong
 
@@ -13,9 +48,44 @@
 
 To prove the new tsconfig `include` entries really type-check `server/` and `shared/`, Claude dropped a file with a deliberate type error into each folder. It confirmed `tsc -b` reported both errors, then deleted the files.
 
-## Part B: API plumbing (commit `d0a98b1`)
+## Prompt 2: first commit, session docs, API plumbing (commit `d0a98b1`)
 
-> Implement only the OpenRouter API plumbing: shared/api.ts, server/openrouter.ts, server/prompt.ts, server/suggestHandler.ts, server/suggestPlugin.ts… POST /api/suggest, server-side key, plain fetch, structured JSON { replacement, rationale }, request validation, timeout/error handling, stateless server. No editor, no diff UI, no streaming, no refinement UI… Do not commit until we review it together.
+````text
+The scaffold is complete and the initial project state is ready to commit.
+Before implementing product features, I want to keep the git history clean and incremental.
+First, help me do the following:
+1. Review the current scaffold and tell me whether anything should be changed before the first commit.
+2. If not, make the initial commit with:
+   Scaffold Vite React TypeScript app
+3. Create an ai-sessions/README.md explaining that this folder contains the AI-assisted development sessions used throughout the assessment.
+4. Add the current planning/scaffolding session in a clean Markdown format under ai-sessions/, preserving the important prompts, decisions, corrections, and trade-offs.
+After that, move to the next engineering step:
+Implement only the OpenRouter API plumbing.
+Create:
+- shared/api.ts
+- server/openrouter.ts
+- server/prompt.ts
+- server/suggestHandler.ts
+- server/suggestPlugin.ts
+- required vite.config.ts changes
+Requirements:
+- POST /api/suggest
+- server-side OPENROUTER_API_KEY
+- plain fetch
+- structured JSON response { replacement, rationale }
+- request validation
+- timeout/error handling
+- stateless server
+- no editor, no diff UI, no streaming, no refinement UI yet
+Then:
+- add focused tests for pure validation/parsing logic if appropriate
+- run npm run build, npm test, and npm run lint
+- manually test one successful /api/suggest request
+- show me the exact files changed and results
+- do not commit the OpenRouter implementation until we review it together
+````
+
+I had already made the initial scaffold commit myself, so Claude reported that instead of committing a second time.
 
 ### Decisions
 

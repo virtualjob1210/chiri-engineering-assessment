@@ -28,8 +28,8 @@ This folder records how the project was built with AI, as the assessment require
 
 ## What these files are
 
-These are **edited summaries** of the real conversation, not raw dumps. Each keeps:
-- the prompt (quoted or closely paraphrased)
+Each file pairs **my exact prompts** with an **edited summary** of what followed. Each keeps:
+- every prompt I sent, **verbatim**, in chronological order. They were copied programmatically from the Claude Code session transcript, including their original wording, typos and formatting. Only the chat client's paste-wrapper tags and automatic IDE-context notices were removed.
 - what Claude recommended
 - what I decided
 - what went wrong and how it was caught

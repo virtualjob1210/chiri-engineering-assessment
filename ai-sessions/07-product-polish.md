@@ -1,6 +1,84 @@
 # 07: Product polish (commit `dc8040b`)
 
-> I do not want to add more major product features. Now do a final polish and submission-readiness pass. Focus only on improvements that materially improve the evaluator's first 1–2 minutes… first-run hint… Reset sample… the card can cover the paragraph below. Improve this without redesigning the whole editor. Prefer a simple, reliable solution… Explain the trade-off… loading, errors, empty states… accessibility and keyboard UX… visual consistency… code cleanup.
+## Prompt
+
+````text
+The core product flow is now complete:
+select text → ask AI → see diff → refine multiple times → accept/reject
+The refinement stage is tested and working. I do not want to add more major product features.
+Now do a final polish and submission-readiness pass.
+Please modify the project directly.
+Focus only on improvements that materially improve the evaluator's first 1–2 minutes with the app.
+Please review and improve:
+1. First-run experience
+- Add a subtle, concise hint explaining the main workflow:
+  Select text → Ask AI → review changes → accept or refine
+- Make sure the sample document immediately gives the evaluator useful text to experiment with.
+- Consider a small Reset sample action if it can be added cleanly.
+2. Suggestion card positioning
+The current card can cover the paragraph below.
+Improve this without redesigning the whole editor.
+Prefer a simple, reliable solution over a complex layout system.
+Explain the trade-off you choose.
+3. Loading, errors, and empty states
+Review:
+- initial suggestion loading
+- refinement loading
+- API errors
+- stale suggestions
+- identical/no-change suggestions
+Make wording concise and human.
+4. Accessibility and keyboard UX
+Review:
+- visible focus states
+- button labels / aria labels where appropriate
+- keyboard shortcuts
+- Enter / Esc behavior
+- color contrast for inserted/deleted text
+Do not over-engineer accessibility, but fix obvious issues.
+5. Visual consistency
+Polish spacing, typography, controls, diff styling, toolbar, and suggestion card.
+Keep the design minimal and professional.
+Do not add a component library or Tailwind.
+6. Code cleanup
+Review the implementation for:
+- temporary/debug code
+- unused exports
+- duplicated logic
+- unnecessary comments
+- naming inconsistencies
+- avoidable complexity
+Refactor only where the improvement is clear.
+7. Final test pass
+Run:
+- npm run build
+- npm test
+- npm run lint
+Also manually verify the complete happy path with OpenRouter:
+select → ask → diff → refine → accept → undo
+and:
+select → ask → reject
+Important scope
+Do NOT add:
+- per-hunk acceptance
+- version history
+- whole-document review
+- multiple simultaneous suggestions
+- authentication
+- database
+- streaming
+- dark mode
+- new infrastructure
+The goal is polish, not feature growth.
+When finished, show me:
+1. files changed
+2. UX improvements made
+3. code cleanup performed
+4. final build/test/lint results
+5. any remaining known limitations
+6. anything you intentionally decided not to change
+Do not commit yet. I want to review the polish pass before the final README and submission work.
+````
 
 ## What changed
 

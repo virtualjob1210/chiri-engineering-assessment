@@ -1,6 +1,60 @@
 # 05: Tracked-change diffs, accept/reject (commit `5553822`)
 
-> Replace the temporary debug panel with a suggestion that is visually anchored to the selected text… compute the diff locally… word-level diffing… keep the suggestion anchored to the original CodeMirror range… map the suggestion range through unrelated editor changes… if the user edits inside the suggested range, mark the suggestion as stale and disable Accept… Accept should be a normal CodeMirror transaction so Ctrl/Cmd+Z can undo it… Cmd/Ctrl+Enter → Accept, Esc → Reject.
+## Prompt
+
+````text
+The selection-based AI command flow is complete and verified.
+Now implement the next stage: visible AI suggestions with tracked-change style diffs and Accept / Reject.
+Please modify the project directly.
+Goal:
+Replace the temporary debug panel with a suggestion that is visually anchored to the selected text so the user can clearly see what the AI wants to change before anything is applied.
+Implement:
+- src/editor/suggestionField.ts
+- src/lib/diff.ts
+- src/lib/diff.test.ts
+- src/components/SuggestionCard.tsx
+- any minimal changes needed in App.tsx, Editor.tsx, extensions.ts, types.ts, and styles
+Core workflow:
+select text → Ask AI → receive replacement → see visible diff → Accept or Reject
+Requirements:
+- compute the diff locally; do not ask the model to generate a diff
+- use word-level diffing with the existing diff package
+- clearly distinguish deleted text from inserted text
+- keep the suggestion anchored to the original CodeMirror range
+- only one active suggestion at a time
+- preserve the original text snapshot
+- map the suggestion range through unrelated editor changes
+- if the user edits inside the suggested range, mark the suggestion as stale and disable Accept
+- Accept must replace only the original selected range with the proposed text
+- Accept should be a normal CodeMirror transaction so Ctrl/Cmd+Z can undo it
+- Reject removes the suggestion without modifying the document
+- remove SuggestionDebugPanel and any temporary console.info
+- show the AI rationale near the suggestion, but keep it visually secondary
+UX:
+- the diff should feel like tracked changes, not a chatbot response
+- keep the document readable while the suggestion is visible
+- Accept and Reject should be obvious
+- support keyboard actions:
+  - Cmd/Ctrl+Enter → Accept
+  - Esc → Reject
+- do not add a permanent sidebar
+Important:
+Do not implement refinement yet.
+Do not implement per-hunk accept/reject yet.
+Do not implement version history yet.
+Keep this stage focused on making a single AI proposal understandable and safely actionable.
+Add focused tests for the pure diff logic and any range/staleness logic that can be tested without the browser.
+When finished:
+1. run npm run build
+2. run npm test
+3. run npm run lint
+4. manually test one real AI suggestion
+5. show me the files changed
+6. explain how range mapping and stale suggestions work
+7. explain how Accept remains undoable
+8. list anything deliberately deferred
+9. do not commit until I review it
+````
 
 ## An experiment that changed the diff algorithm
 

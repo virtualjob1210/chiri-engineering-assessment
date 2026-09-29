@@ -1,6 +1,62 @@
 # 04: Selection-aware AI command (commit `433c7d5`)
 
-> When the user selects text in CodeMirror, they should be able to invoke a small contextual AI command UI… Ctrl+K and Cmd+K… position the command UI near the selected text, not in a permanent sidebar… quick actions: Shorten, Make clearer, More formal, Fix grammar… Esc closes… Ctrl+Enter submits… extract bounded context… For this stage… show the raw returned suggestion in a minimal temporary panel… Do NOT implement inline diff rendering, tracked changes, accept/reject, refinement.
+## Prompt
+
+````text
+The Markdown editor foundation is complete and reviewed.
+Now implement the next incremental stage: selection-aware AI command entry, but do not build suggestion diffs yet.
+Please implement this directly in the project.
+Goal:
+When the user selects text in CodeMirror, they should be able to invoke a small contextual AI command UI and submit an instruction for that exact selection.
+Implement:
+- src/components/SelectionToolbar.tsx
+- src/lib/context.ts
+- any minimal changes needed in App.tsx, Editor.tsx, or editor extensions
+- the client-side API caller if needed, but keep the response handling minimal for now
+UX requirements:
+- show a subtle contextual action when non-empty text is selected
+- support Ctrl+K and Cmd+K to open the AI command UI
+- position the command UI near the selected text, not in a permanent sidebar
+- include a free-text instruction field
+- include a few quick actions:
+  - Shorten
+  - Make clearer
+  - More formal
+  - Fix grammar
+- Esc closes the UI
+- Ctrl+Enter / Cmd+Enter submits
+- do not allow submission with an empty selection
+- extract bounded context around the selection for the future API call
+For this stage, when the user submits:
+- call the existing POST /api/suggest
+- show a simple temporary loading state
+- store/log the returned { replacement, rationale }
+- it is acceptable to show the raw returned suggestion in a minimal temporary panel or debug area
+Do NOT implement yet:
+- inline diff rendering
+- tracked changes
+- accept/reject
+- refinement
+- per-hunk actions
+- version history
+Keep the goal narrow: prove the flow
+select text → open command → give instruction → API request → receive suggestion
+Engineering requirements:
+- keep CodeMirror as the source of truth for selection/ranges
+- avoid unnecessary React re-renders
+- keep context extraction in a pure function
+- add focused tests for context.ts
+- preserve the selected range and original text when the request is submitted
+- handle request errors cleanly
+When finished:
+1. run npm run build
+2. run npm test
+3. run npm run lint
+4. show the files changed
+5. explain the main UX and technical decisions
+6. tell me what is deliberately left for the diff stage
+7. do not commit these changes yet
+````
 
 ## Decisions
 

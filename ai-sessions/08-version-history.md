@@ -1,10 +1,133 @@
 # 08: Version history (commit `ebce23b`)
 
-## How this feature came about
+## Prompt 1
 
-After the polish pass I asked whether the app supported the brief's idea of *"version history showing how the document evolved with AI help"*. Claude answered plainly that **it did not**. It pointed out what already existed (undo, and revisions inside one suggestion) and sketched what a view-only log would take. I then asked for it:
+After the polish pass, I asked:
 
-> Every time the user accepts an AI suggestion, create a new history entry… a small Version history action in the header… lists accepted AI revisions, newest first… Persist in localStorage… separate key… a sensible cap… Do not create entries for rejected suggestions, failed requests, refinements that were not accepted, normal manual typing… Keep version history outside CodeMirror editor state… First implement history as view-only… Ctrl/Cmd+Z should still undo the accepted text exactly as it does today… if that creates a semantic mismatch, explain it and propose the simplest honest behavior.
+````text
+Does this project support "Version history showing how the document evolved with AI help" feature?
+````
+
+Claude answered plainly that **it did not**. It pointed out what already existed (undo, and revisions inside one suggestion) and sketched what a view-only log would take.
+
+## Prompt 2
+
+````text
+The core editor and AI collaboration flow are complete.
+I now want to add one final feature from the assessment ideas:
+Version history showing how the document evolved with AI help.
+Please implement this directly in the existing project, but keep it lightweight and consistent with the current architecture.
+Product goal
+Every time the user accepts an AI suggestion, create a new history entry/snapshot.
+The user should be able to open a small Version History panel from the top navigation/header and inspect how the document evolved through accepted AI edits.
+History entry
+Each accepted AI suggestion should record:
+- unique id
+- timestamp
+- AI instruction that led to the accepted suggestion
+- rationale
+- original selected text
+- accepted replacement text
+- full document content after the accept
+- revision number / sequence number
+Example:
+interface VersionEntry {
+  id: string
+  createdAt: string
+  revision: number
+  instruction: string
+  rationale: string
+  originalText: string
+  replacementText: string
+  document: string
+}
+
+UX
+Add a small Version history action in the app header/navigation.
+Clicking it should open a side panel, drawer, or popover that lists accepted AI revisions, newest first.
+Each item should show:
+- Revision N
+- timestamp
+- instruction
+- short summary/rationale
+When the user opens one history entry, show:
+- before/after text for that accepted suggestion
+- the AI rationale
+- optionally a compact diff using the existing diff utilities
+Keep the visual language consistent with the existing suggestion card.
+Do not turn this into a chatbot or a complex timeline.
+Persistence
+Persist version history in localStorage, similar to the current document persistence.
+Use a separate key from the current document.
+History should survive page refreshes.
+Add a sensible cap, for example the most recent 50 accepted AI revisions.
+Integration point
+The history entry should be created only when an AI suggestion is actually accepted.
+Do not create entries for:
+- rejected suggestions
+- failed requests
+- refinements that were not accepted
+- normal manual typing
+If the user refines a suggestion multiple times and accepts Revision 3, create only one history entry using the final accepted proposal, but preserve the final instruction/rationale that led to it.
+Architecture
+Prefer:
+- src/lib/history.ts
+- src/lib/history.test.ts
+- src/components/VersionHistory.tsx
+Make only minimal changes to:
+- App.tsx
+- the suggestion accept flow
+- styles
+Keep version history outside CodeMirror editor state unless there is a strong reason not to.
+Restore behavior
+First implement history as view-only.
+Do not add restore/revert yet unless it is clearly safe and very small.
+I want to avoid complex conflicts between old snapshots and current manual edits.
+If you think restore is worth adding, explain the trade-off before implementing it.
+Important behavior
+When an AI suggestion is accepted:
+1. capture the document before the accept if needed
+2. apply the existing CodeMirror accept transaction
+3. capture the resulting full document
+4. create the version history entry
+5. persist it
+Ensure this does not break the current undo behavior.
+Ctrl/Cmd+Z should still undo the accepted text exactly as it does today.
+History itself does not need to disappear when the editor undo command is used; if that creates a semantic mismatch, explain it and propose the simplest honest behavior.
+Tests
+Add focused tests for:
+- creating history entries
+- persistence/load
+- ordering
+- maximum history size
+- rejected suggestions not creating history
+- multiple refinements creating only one accepted history entry
+Scope
+Do not add:
+- backend/database storage
+- multi-user history
+- branching versions
+- autosaved manual-edit snapshots
+- complex restore conflict handling
+This feature should demonstrate how the document evolved through accepted AI collaboration, not become a full version-control system.
+When finished
+Please:
+1. run npm run build
+2. run npm test
+3. run npm run lint
+4. manually test:
+   - accept AI suggestion
+   - open version history
+   - refresh browser
+   - confirm history remains
+   - reject another suggestion and confirm no new history entry
+5. show me the files changed
+6. explain where history is recorded in the accept flow
+7. explain how persistence works
+8. explain any interaction with undo/redo
+9. list anything deliberately deferred
+10. do not commit until I review it
+````
 
 ## The key design point
 

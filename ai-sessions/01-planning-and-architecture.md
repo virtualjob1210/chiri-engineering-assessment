@@ -2,11 +2,25 @@
 
 **Goal:** turn the brief into a 4–6 hour MVP and agree the architecture before writing any code.
 
-## Prompt 1: scope the MVP (no code)
+## Prompt 1
 
-> I want you to act as my senior pair-programming partner, not just generate the entire project. First, analyze the requirements and help me define a focused MVP that I can realistically build in about 4–6 hours… Summarize the core requirements, separate required from optional, identify the most important user workflow, recommend a minimal architecture, identify the biggest technical and UX risks, suggest what I should intentionally leave out, give me a short implementation plan in stages. **Do not write implementation code yet.**
+The assessment PDF was attached to this message.
 
-The assessment PDF was attached.
+````text
+I’m working on this engineering assessment.
+I want you to act as my senior pair-programming partner, not just generate the entire project.
+First, analyze the requirements and help me define a focused MVP that I can realistically build in about 4–6 hours.
+Please:
+1. Summarize the core product requirements.
+2. Separate required features from optional features.
+3. Identify the most important user workflow.
+4. Recommend a minimal architecture.
+5. Identify the biggest technical and UX risks.
+6. Suggest what I should intentionally leave out.
+7. Give me a short implementation plan in stages.
+Do not write implementation code yet.
+My goal is to demonstrate good product judgment, clean engineering, and effective AI-assisted development.
+````
 
 ### What Claude recommended
 
@@ -30,9 +44,29 @@ The assessment PDF was attached.
 
 I agreed with the MVP and fixed the stack: Vite, React, TypeScript, CodeMirror 6, OpenRouter through a small server-side proxy, client-side diffing, localStorage.
 
-## Prompt 2: architecture before scaffolding
+## Prompt 2
 
-> Before writing feature code, help me scaffold the project cleanly: folder structure, exact npm packages for the MVP only, responsibility of each module, TypeScript types for the suggestion workflow, the API contract, env variables, and shell commands. Explain any dependency you intentionally avoid.
+````text
+I agree with the focused MVP and I want to use:
+- Vite
+- React
+- TypeScript
+- CodeMirror 6
+- OpenRouter through a small server-side proxy
+- client-side diffing
+- localStorage for the document
+Before writing feature code, help me scaffold the project cleanly.
+Please do the following:
+1. Propose the minimal folder structure.
+2. List the exact npm packages we need for the MVP only.
+3. Explain the responsibility of each main file/module.
+4. Define the TypeScript types for the core suggestion workflow.
+5. Define the API contract between frontend and the OpenRouter proxy.
+6. Identify environment variables and create an .env.example plan.
+7. Give me the shell commands to create the project and install dependencies.
+Do not implement the editor or AI features yet.
+Keep the architecture small enough for a 4–6 hour assessment and explain any dependency you intentionally avoid.
+````
 
 ### Key decisions
 

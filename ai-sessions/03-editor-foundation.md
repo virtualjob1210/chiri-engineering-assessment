@@ -1,6 +1,48 @@
 # 03: Markdown editor foundation (commit `6f011c6`)
 
-> Build the Markdown editor foundation only… CodeMirror 6… a document-like appearance rather than an IDE… no line numbers… a useful sample document… persistence using localStorage… normal undo/redo… Keep the React wrapper around CodeMirror thin and expose the editor state/selection in a way that will make the next AI-selection stage easy… Add focused tests only where they provide value, especially for storage.ts; don't create tests just to increase test count.
+## Prompt
+
+````text
+The OpenRouter plumbing is complete, reviewed, tested, and committed.
+Let's move to the next incremental stage: build the Markdown editor foundation only.
+Please implement the changes directly in the project.
+Use CodeMirror 6 and create:
+- src/editor/Editor.tsx
+- src/editor/extensions.ts
+- src/sampleDoc.ts
+- src/lib/storage.ts
+- any minimal changes needed in App.tsx and styles.css
+For this stage, I want:
+- a clean browser-based Markdown editor
+- Markdown syntax support
+- a document-like appearance rather than an IDE/code-editor appearance
+- no line numbers or programming-oriented UI
+- a useful sample Markdown document on first launch
+- document persistence using localStorage
+- normal undo/redo behavior
+- the editor to fill the main working area cleanly
+Keep the React wrapper around CodeMirror thin and expose the editor state/selection in a way that will make the next AI-selection stage easy to implement.
+Do not implement yet:
+- OpenRouter calls from the UI
+- AI toolbar
+- Cmd/Ctrl+K
+- suggestion state
+- diff rendering
+- accept/reject
+- refinement
+- preview pane
+- version history
+Keep this stage deliberately small.
+Add focused tests only where they provide value, especially for storage.ts; don't create tests just to increase test count.
+When finished:
+1. run npm run build
+2. run npm test
+3. run npm run lint
+4. show me the files changed
+5. explain any important implementation decisions
+6. tell me what you deliberately left for the next stage
+Do not commit these editor changes yet. I want to review them first.
+````
 
 ## Decisions
 
