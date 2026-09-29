@@ -28,17 +28,17 @@ export async function fetchSuggestion(request: SuggestRequest, signal?: AbortSig
     })
   } catch {
     if (signal?.aborted) return { ok: false, aborted: true, message: 'Cancelled' }
-    return { ok: false, aborted: false, message: 'Could not reach the server. Is `npm run dev` running?' }
+    return { ok: false, aborted: false, message: "Can't reach the local server. Is npm run dev still running?" }
   }
 
   const body: unknown = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message = isApiError(body) ? body.error.message : `Request failed (${response.status})`
+    const message = isApiError(body) ? body.error.message : `Something went wrong (error ${response.status}). Try again.`
     return { ok: false, aborted: false, message }
   }
   if (!isSuggestResponse(body)) {
-    return { ok: false, aborted: false, message: 'The server returned an unexpected response.' }
+    return { ok: false, aborted: false, message: 'The server sent an unexpected reply. Try again.' }
   }
   return { ok: true, suggestion: body }
 }

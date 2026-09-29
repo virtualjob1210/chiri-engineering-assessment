@@ -1,6 +1,7 @@
 // Seed document shown on first launch. It is written as a realistic rough
-// draft (wordy passages, uneven tone, a thin section) so there is always
-// something worth improving with the AI.
+// draft so every quick action has an obvious target: a wordy intro (Shorten,
+// Make clearer), a too-casual paragraph (More formal), a paragraph with
+// grammar slips (Fix grammar), and a thin section to expand.
 
 export const SAMPLE_DOC = `# Launching Our Team Newsletter
 
@@ -18,7 +19,7 @@ Honestly, Slack is kind of a mess right now and stuff gets lost super fast, so t
 
 ## How it will work
 
-The newsletter will be sent every other Friday. Each team nominates one person to submit a short update by Wednesday.
+The newsletter will be send every other Friday. Each team nominate one person who submit a short update by Wednesday, its important that updates arrives on time.
 
 ## Open questions
 

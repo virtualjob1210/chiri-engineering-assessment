@@ -6,7 +6,7 @@ import type { EditorView } from '@codemirror/view'
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { SUGGEST_LIMITS } from '../../shared/limits.ts'
 import type { TextRange } from '../lib/context.ts'
-import { MOD } from '../lib/keys.ts'
+import { MOD, MOD_ARIA } from '../lib/keys.ts'
 import { useAnchoredPosition } from './useAnchoredPosition.ts'
 
 const QUICK_ACTIONS = [
@@ -61,6 +61,7 @@ export function SelectionToolbar({ view, range, open, busy, error, onOpen, onClo
           // Keep editor focus and selection intact when clicking the hint.
           onMouseDown={(event) => event.preventDefault()}
           onClick={onOpen}
+          aria-keyshortcuts={`${MOD_ARIA}+K`}
         >
           <span aria-hidden="true">✦</span> Ask AI <kbd>{MOD}K</kbd>
         </button>
@@ -70,7 +71,7 @@ export function SelectionToolbar({ view, range, open, busy, error, onOpen, onClo
 
   return (
     <div ref={containerRef} className="ai-anchor">
-      <div className="ai-command" role="dialog" aria-label="Ask AI about the selection" onKeyDown={handleKeyDown}>
+      <div className="ai-command" role="dialog" aria-label="Ask AI to edit the selection" onKeyDown={handleKeyDown}>
         <div className="ai-command-row">
           <input
             ref={inputRef}
@@ -78,14 +79,14 @@ export function SelectionToolbar({ view, range, open, busy, error, onOpen, onClo
             autoFocus
             value={instruction}
             onChange={(event) => setInstruction(event.target.value)}
-            placeholder="Tell the AI what to change…"
-            aria-label="Instruction"
+            placeholder="What should change? e.g. “friendlier”, “add an example”"
+            aria-label="Instruction for the AI"
             maxLength={SUGGEST_LIMITS.instruction}
             readOnly={busy}
           />
           <button
             type="button"
-            className="ai-command-send"
+            className="btn btn-primary"
             onClick={() => submit(instruction)}
             disabled={busy || instruction.trim() === ''}
           >
@@ -94,18 +95,20 @@ export function SelectionToolbar({ view, range, open, busy, error, onOpen, onClo
         </div>
         <div className="ai-command-actions">
           {QUICK_ACTIONS.map((action) => (
-            <button key={action.label} type="button" onClick={() => submit(action.instruction)} disabled={busy}>
+            <button key={action.label} type="button" className="chip" onClick={() => submit(action.instruction)} disabled={busy}>
               {action.label}
             </button>
           ))}
         </div>
-        <div className="ai-command-status" aria-live="polite">
+        <div className="status" aria-live="polite">
           {busy ? (
-            <span className="ai-thinking">Thinking… · Esc to cancel</span>
+            <span className="is-busy">Writing a suggestion… Esc to cancel</span>
           ) : error ? (
-            <span className="ai-error" role="alert">{error}</span>
+            <span className="is-error" role="alert">
+              {error}
+            </span>
           ) : (
-            <span>Enter to send · Esc to close</span>
+            <span>Enter to ask · Esc to close</span>
           )}
         </div>
       </div>

@@ -3,12 +3,12 @@
 // actions, the AI's one-line rationale, and a compact field for refining the
 // proposal ("shorter", "keep the second sentence", …).
 
-import type { EditorView } from '@codemirror/view'
-import { useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { EditorView } from '@codemirror/view'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react'
 import { SUGGEST_LIMITS } from '../../shared/limits.ts'
 import { isUnchanged } from '../lib/diff.ts'
-import { MOD } from '../lib/keys.ts'
-import type { ReadySuggestion } from '../editor/suggestionField.ts'
+import { MOD, MOD_ARIA } from '../lib/keys.ts'
+import { getSuggestion, reserveCardSpace, type ReadySuggestion } from '../editor/suggestionField.ts'
 import { useAnchoredPosition } from './useAnchoredPosition.ts'
 
 const QUICK_REFINES = [
@@ -16,6 +16,9 @@ const QUICK_REFINES = [
   { label: 'More formal', instruction: 'Make it more formal.' },
   { label: 'Keep details', instruction: 'Keep more of the original details and wording.' },
 ] as const
+
+/** Breathing room above and below the card inside its reserved space. */
+const SPACE_PADDING = 16
 
 interface SuggestionCardProps {
   view: EditorView
@@ -26,18 +29,54 @@ interface SuggestionCardProps {
   onCancelRefine: () => void
 }
 
+/**
+ * Reports the card's height to the editor, which reserves that much empty
+ * space under the passage so the card never covers the following text.
+ * Scrolls the reserved space into view when the card first appears.
+ */
+function useReservedSpace(view: EditorView, cardRef: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const card = cardRef.current
+    if (!card) return
+    let reserved = 0
+
+    const report = (scroll: boolean) => {
+      const height = card.offsetHeight + SPACE_PADDING
+      if (height === reserved) return
+      reserved = height
+      const anchor = getSuggestion(view.state)?.to
+      const reveal = scroll && anchor !== undefined
+      view.dispatch({
+        effects: [
+          reserveCardSpace.of(height),
+          ...(reveal ? [EditorView.scrollIntoView(anchor, { y: 'nearest', yMargin: height + 24 })] : []),
+        ],
+      })
+    }
+
+    report(true)
+    const observer = new ResizeObserver(() => report(false))
+    observer.observe(card)
+    return () => observer.disconnect()
+  }, [view, cardRef])
+}
+
 export function SuggestionCard({ view, suggestion, onAccept, onReject, onRefine, onCancelRefine }: SuggestionCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
   const { stale, refinement, rounds } = suggestion
   const unchanged = isUnchanged(suggestion.segments)
   const refining = refinement?.status === 'loading'
   const canRefine = !stale && rounds.length <= SUGGEST_LIMITS.historyTurns
 
-  useAnchoredPosition(view, suggestion, containerRef, `${stale}|${unchanged}|${refinement?.status}|${rounds.length}`)
+  useReservedSpace(view, cardRef)
+  useAnchoredPosition(view, suggestion, containerRef, `${stale}|${unchanged}|${refinement?.status}|${rounds.length}`, {
+    flip: false,
+  })
 
   let note = suggestion.rationale
-  if (stale) note = 'You edited this passage, so the suggestion no longer applies.'
-  else if (unchanged) note = `No changes suggested. ${suggestion.rationale}`
+  if (stale) note = 'This text changed after the suggestion was made. Dismiss it and ask again.'
+  else if (unchanged) note = `No changes needed. ${suggestion.rationale}`
 
   // Keep focus where it is (usually the editor) when clicking buttons, so
   // keyboard shortcuts keep working. Text fields still take focus normally.
@@ -47,19 +86,27 @@ export function SuggestionCard({ view, suggestion, onAccept, onReject, onRefine,
 
   return (
     <div ref={containerRef} className="ai-anchor">
-      <div className={`suggestion-card${stale ? ' is-stale' : ''}`} role="group" aria-label="AI suggestion" onMouseDown={keepFocus}>
+      <div
+        ref={cardRef}
+        className={`suggestion-card${stale ? ' is-stale' : ''}`}
+        role="group"
+        aria-label="AI suggestion"
+        onMouseDown={keepFocus}
+      >
         <div className="suggestion-actions">
           {!stale && !unchanged && (
-            <button type="button" className="suggestion-accept" onClick={onAccept}>
+            <button type="button" className="btn btn-accept" onClick={onAccept} aria-keyshortcuts={`${MOD_ARIA}+Enter`}>
               Accept <kbd>{MOD}↵</kbd>
             </button>
           )}
-          <button type="button" className="suggestion-reject" onClick={onReject}>
+          <button type="button" className="btn" onClick={onReject} aria-keyshortcuts="Escape">
             {stale || unchanged ? 'Dismiss' : 'Reject'} <kbd>Esc</kbd>
           </button>
           {rounds.length > 1 && <span className="suggestion-round">Revision {rounds.length}</span>}
         </div>
-        <p className="suggestion-note">{note}</p>
+        <p className="suggestion-note" role="status">
+          {note}
+        </p>
 
         {canRefine && (
           // Remounted after each successful round so the field starts empty,
@@ -122,22 +169,22 @@ function RefineField({ autoFocus, busy, error, onSubmit, onAccept, onCancel, onE
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Refine this suggestion…"
+          placeholder="Refine, e.g. “warmer”…"
           aria-label="Refine this suggestion"
           maxLength={SUGGEST_LIMITS.instruction}
           readOnly={busy}
           autoFocus={autoFocus}
         />
         {QUICK_REFINES.map((action) => (
-          <button key={action.label} type="button" className="refine-chip" disabled={busy} onClick={() => submit(action.instruction)}>
+          <button key={action.label} type="button" className="chip" disabled={busy} onClick={() => submit(action.instruction)}>
             {action.label}
           </button>
         ))}
       </div>
-      {busy && <p className="refine-status is-busy">Refining… · Esc to cancel</p>}
+      {busy && <p className="status is-busy">Revising… Esc to cancel</p>}
       {!busy && error && (
-        <p className="refine-status is-error" role="alert">
-          Couldn't refine: {error}
+        <p className="status is-error" role="alert">
+          Couldn't revise: {error}
         </p>
       )}
     </div>

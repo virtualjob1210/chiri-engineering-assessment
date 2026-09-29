@@ -73,6 +73,21 @@ const errorResult = (status: number, code: ApiErrorCode, message: string): Handl
   body: { error: { code, message } },
 })
 
+/**
+ * User-facing wording for upstream failures. Technical detail goes to the
+ * server log; the UI gets a short sentence that says what to do next.
+ */
+export function describeUpstreamError(err: unknown): string {
+  if (!(err instanceof OpenRouterError)) return 'Something went wrong talking to the AI. Try again.'
+  if (err.kind === 'timeout') return 'The AI took too long to respond. Try again.'
+  if (err.kind === 'network') return "Couldn't reach OpenRouter. Check your connection and try again."
+  if (err.kind === 'empty') return 'The AI sent back an empty reply. Try again.'
+  if (err.status === 401 || err.status === 403) return 'OpenRouter rejected the API key. Check OPENROUTER_API_KEY in .env.'
+  if (err.status === 402) return 'The OpenRouter account is out of credit.'
+  if (err.status === 429) return 'Too many requests right now. Wait a moment and try again.'
+  return 'The AI service had a problem. Try again.'
+}
+
 /** Model attempts per request: one retry when the output is unparseable. */
 const MAX_ATTEMPTS = 2
 
@@ -91,9 +106,8 @@ export async function handleSuggest(body: unknown, deps: SuggestDeps): Promise<H
     try {
       raw = await deps.complete({ apiKey: deps.apiKey, model: deps.model, messages, signal: deps.signal })
     } catch (err) {
-      const message = err instanceof OpenRouterError ? err.message : 'Unexpected error calling OpenRouter'
       console.error('[suggest] upstream failure:', err)
-      return errorResult(502, 'upstream_error', message)
+      return errorResult(502, 'upstream_error', describeUpstreamError(err))
     }
 
     const parsed = parseModelReply(raw)
@@ -101,5 +115,5 @@ export async function handleSuggest(body: unknown, deps: SuggestDeps): Promise<H
     console.warn(`[suggest] unparseable model output (attempt ${attempt}/${MAX_ATTEMPTS}):`, raw.slice(0, 300))
   }
 
-  return errorResult(502, 'invalid_model_output', 'The AI returned an unexpected response. Please try again.')
+  return errorResult(502, 'invalid_model_output', "The AI's reply couldn't be read. Try again.")
 }

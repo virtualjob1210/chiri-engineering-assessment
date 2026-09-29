@@ -1,3 +1,4 @@
+import { isolateHistory } from '@codemirror/commands'
 import type { EditorView, ViewUpdate } from '@codemirror/view'
 import { useRef, useState } from 'react'
 import type { SuggestRequest } from '../shared/api.ts'
@@ -11,6 +12,7 @@ import {
   activeRequestId,
   buildRefineRequest,
   cancelRefinement,
+  clearSuggestion,
   failRequest,
   getSuggestion,
   rejectSuggestion,
@@ -22,6 +24,7 @@ import {
 } from './editor/suggestionField.ts'
 import { fetchSuggestion, type SuggestResult } from './lib/apiClient.ts'
 import { extractContext, trimRange, type TextRange } from './lib/context.ts'
+import { MOD } from './lib/keys.ts'
 import { loadDocument, saveDocument } from './lib/storage.ts'
 import { SAMPLE_DOC } from './sampleDoc.ts'
 
@@ -103,7 +106,20 @@ export default function App() {
     return result
   }
 
-  const submit = async (instruction: string) => {
+  /** Replaces the document with the sample. A normal edit, so Ctrl/Cmd+Z restores it. */
+  const resetSample = () => {
+    if (!view) return
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: SAMPLE_DOC },
+      selection: { anchor: 0 },
+      effects: clearSuggestion.of(null),
+      annotations: isolateHistory.of('full'),
+      scrollIntoView: true,
+    })
+    view.focus()
+  }
+
+  const ask = async (instruction: string) => {
     if (!view || getSuggestion(view.state)?.status === 'pending') return
     const range = readSelection(view)
     if (!range) return
@@ -173,9 +189,12 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className="app-title">AI Document Editor</span>
-        <span className="app-status" aria-live="polite">
-          {selection ? `${selection.to - selection.from} characters selected` : 'Autosaves in this browser'}
-        </span>
+        <p className="app-hint">
+          Select text → <strong>Ask AI</strong> <kbd>{MOD}K</kbd> → review the changes → accept or refine
+        </p>
+        <button type="button" className="btn btn-quiet" onClick={resetSample} title="Undo with Ctrl/⌘+Z">
+          Reset sample
+        </button>
       </header>
       <main className="app-main">
         <Editor initialDoc={initialDoc} extensions={editorExtensions} onViewChange={setView} onUpdate={handleUpdate} />
@@ -185,8 +204,16 @@ export default function App() {
         <SuggestionCard
           view={view}
           suggestion={suggestion}
-          onAccept={() => acceptSuggestion(view)}
-          onReject={() => rejectSuggestion(view)}
+          // The card (and whatever in it had focus) disappears; hand focus
+          // back to the editor so typing and Ctrl/Cmd+Z keep working.
+          onAccept={() => {
+            acceptSuggestion(view)
+            view.focus()
+          }}
+          onReject={() => {
+            rejectSuggestion(view)
+            view.focus()
+          }}
           onRefine={refine}
           onCancelRefine={() => view.dispatch({ effects: cancelRefinement.of(null) })}
         />
@@ -201,7 +228,7 @@ export default function App() {
           error={commandError}
           onOpen={() => setCommandOpen(true)}
           onClose={closeCommand}
-          onSubmit={submit}
+          onSubmit={ask}
         />
       )}
     </div>

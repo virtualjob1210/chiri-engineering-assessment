@@ -10,7 +10,7 @@ export interface TextRange {
 }
 
 /** Characters of surrounding text sent on each side of the selection. */
-export const CONTEXT_CHARS = 1_500
+const CONTEXT_CHARS = 1_500
 
 /**
  * Shrinks a selection to exclude leading/trailing whitespace, so a sloppy

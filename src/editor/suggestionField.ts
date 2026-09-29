@@ -33,11 +33,11 @@ interface SuggestionBase {
 }
 
 /** Follow-up request state for a ready suggestion. */
-export type Refinement =
+type Refinement =
   | { status: 'loading'; requestId: number; instruction: string }
   | { status: 'error'; instruction: string; message: string }
 
-export type PendingSuggestion = SuggestionBase & { status: 'pending' }
+type PendingSuggestion = SuggestionBase & { status: 'pending' }
 export type ReadySuggestion = SuggestionBase & {
   status: 'ready'
   /** Every completed proposal, oldest first. The last one is on screen. */
@@ -136,7 +136,7 @@ export function buildRefineRequest(state: EditorState, suggestion: ReadySuggesti
  * it stale. Typing right at either edge counts as outside: `from` maps
  * forward and `to` maps backward, so edge insertions never join the range.
  */
-export function mapSuggestion<S extends Suggestion>(suggestion: S, changes: ChangeDesc): S {
+function mapSuggestion<S extends Suggestion>(suggestion: S, changes: ChangeDesc): S {
   let touched = false
   changes.iterChangedRanges((fromA, toA) => {
     if (fromA < suggestion.to && toA > suggestion.from) touched = true
@@ -157,7 +157,20 @@ export const suggestionField = StateField.define<Suggestion | null>({
     for (const effect of tr.effects) suggestion = applyEffect(suggestion, effect)
     return suggestion
   },
-  provide: (field) => EditorView.decorations.from(field, buildDecorations),
+})
+
+/**
+ * Height (px) to reserve under the suggested passage for the suggestion
+ * card, reported by the card itself. The editor renders an empty block of
+ * this height so the card never covers the text that follows.
+ */
+export const reserveCardSpace = StateEffect.define<number>()
+const cardSpaceField = StateField.define<number>({
+  create: () => 0,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(reserveCardSpace)) value = effect.value
+    return value
+  },
 })
 
 export const getSuggestion = (state: EditorState) => state.field(suggestionField, false) ?? null
@@ -225,23 +238,58 @@ class InsertionWidget extends WidgetType {
   }
 }
 
+/** Empty block that makes room for the suggestion card below the passage. */
+class CardSpaceWidget extends WidgetType {
+  readonly height: number
+
+  constructor(height: number) {
+    super()
+    this.height = height
+  }
+
+  eq(other: CardSpaceWidget) {
+    return other.height === this.height
+  }
+
+  toDOM() {
+    const el = document.createElement('div')
+    el.className = 'cm-card-space'
+    el.style.height = `${this.height}px`
+    el.setAttribute('aria-hidden', 'true')
+    return el
+  }
+
+  get estimatedHeight() {
+    return this.height
+  }
+}
+
 const pendingMark = Decoration.mark({ class: 'cm-suggest-pending' })
 const staleMark = Decoration.mark({ class: 'cm-suggest-stale' })
 const rangeMark = Decoration.mark({ class: 'cm-suggest-range' })
 const refiningRangeMark = Decoration.mark({ class: 'cm-suggest-range cm-suggest-refining' })
-const deleteMark = Decoration.mark({ class: 'cm-diff-delete' })
+// <del>/<ins> carry the meaning for assistive tech, not just colour.
+const deleteMark = Decoration.mark({ class: 'cm-diff-delete', tagName: 'del' })
 
-function buildDecorations(suggestion: Suggestion | null): DecorationSet {
+function buildDecorations(state: EditorState): DecorationSet {
+  const suggestion = state.field(suggestionField)
   if (!suggestion || suggestion.from === suggestion.to) return Decoration.none
   const { from, to } = suggestion
 
   if (suggestion.status === 'pending') return Decoration.set(pendingMark.range(from, to))
+
+  const cardSpace = state.field(cardSpaceField)
+  const spacer =
+    cardSpace > 0
+      ? [Decoration.widget({ widget: new CardSpaceWidget(cardSpace), block: true, side: 1 }).range(state.doc.lineAt(to).to)]
+      : []
+
   // Offsets into the original no longer line up once the text was edited.
-  if (suggestion.stale) return Decoration.set(staleMark.range(from, to))
+  if (suggestion.stale) return Decoration.set([staleMark.range(from, to), ...spacer], true)
 
   // The current diff stays visible while a refinement runs, gently pulsing.
   const refining = suggestion.refinement?.status === 'loading'
-  const ranges = [(refining ? refiningRangeMark : rangeMark).range(from, to)]
+  const ranges = [(refining ? refiningRangeMark : rangeMark).range(from, to), ...spacer]
   let pos = from
   for (const segment of suggestion.segments) {
     if (segment.kind === 'insert') {
@@ -298,4 +346,12 @@ const suggestionKeymap = Prec.highest(
   ]),
 )
 
-export const suggestionExtension: Extension = [suggestionField, suggestionKeymap, suggestionTheme]
+const suggestionDecorations = EditorView.decorations.compute([suggestionField, cardSpaceField], buildDecorations)
+
+export const suggestionExtension: Extension = [
+  suggestionField,
+  cardSpaceField,
+  suggestionDecorations,
+  suggestionKeymap,
+  suggestionTheme,
+]

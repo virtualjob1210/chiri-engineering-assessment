@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OpenRouterError, type CompleteFn } from './openrouter.ts'
-import { handleSuggest, LIMITS, validateSuggestRequest } from './suggestHandler.ts'
+import { describeUpstreamError, handleSuggest, LIMITS, validateSuggestRequest } from './suggestHandler.ts'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -64,7 +64,10 @@ describe('handleSuggest', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const complete = vi.fn<CompleteFn>().mockRejectedValue(new OpenRouterError('timeout', 'timed out'))
     const result = await handleSuggest(validBody, deps(complete))
-    expect(result).toEqual({ status: 502, body: { error: { code: 'upstream_error', message: 'timed out' } } })
+    expect(result).toEqual({
+      status: 502,
+      body: { error: { code: 'upstream_error', message: 'The AI took too long to respond. Try again.' } },
+    })
     expect(complete).toHaveBeenCalledOnce()
   })
 
@@ -80,5 +83,20 @@ describe('handleSuggest', () => {
     const result = await handleSuggest(validBody, { ...deps(complete), apiKey: undefined })
     expect(result).toMatchObject({ status: 500, body: { error: { code: 'missing_api_key' } } })
     expect(complete).not.toHaveBeenCalled()
+  })
+})
+
+describe('describeUpstreamError', () => {
+  it.each([
+    [new OpenRouterError('http', '401 bad key', 401), /API key/],
+    [new OpenRouterError('http', '402', 402), /out of credit/],
+    [new OpenRouterError('http', '429', 429), /Too many requests/],
+    [new OpenRouterError('http', '500', 500), /had a problem/],
+    [new OpenRouterError('network', 'ECONNRESET'), /Couldn't reach/],
+    [new Error('boom'), /Something went wrong/],
+  ])('maps %s to a short, actionable message', (err, expected) => {
+    const message = describeUpstreamError(err)
+    expect(message).toMatch(expected)
+    expect(message).not.toMatch(/\d{3}|ECONN|boom/)
   })
 })

@@ -1,19 +1,23 @@
 :root {
   --text: #1f2328;
-  --muted: #6e7781;
+  --muted: #656d76;
   --markup: #afb8c1;
   --accent: #0969da;
   --border: #e4e7eb;
   --surface: #ffffff;
+  --subtle-bg: #f6f8fa;
   --code-bg: #f3f4f6;
   --selection: #b6d4fe;
   --selection-blur: #dbe7f7;
   --pending-bg: #eef4ff;
   --suggest-bg: #fafbfc;
+  /* Diff colours: both pairs exceed WCAG AA (4.5:1) for text. */
   --delete-fg: #b42318;
   --delete-bg: #fdeceb;
   --insert-fg: #116329;
   --insert-bg: #dcf5e3;
+  --radius: 6px;
+  --shadow: 0 6px 20px rgb(0 0 0 / 0.1);
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-prose: Charter, 'Iowan Old Style', Georgia, Cambria, 'Times New Roman', serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -34,6 +38,20 @@ body,
   margin: 0;
 }
 
+/* One visible focus style for every control. */
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+kbd {
+  font: 11px var(--font-ui);
+  opacity: 0.7;
+}
+
+/* ---- Layout ------------------------------------------------------------ */
+
 .app {
   display: flex;
   flex-direction: column;
@@ -43,19 +61,33 @@ body,
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
 
 .app-title {
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.app-status {
+.app-hint {
+  flex: 1;
+  margin: 0;
   color: var(--muted);
+  text-align: center;
+}
+
+.app-hint strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+@media (max-width: 760px) {
+  .app-hint {
+    visibility: hidden;
+  }
 }
 
 /* The editor fills everything below the header and scrolls internally. */
@@ -68,7 +100,104 @@ body,
   height: 100%;
 }
 
-/* ---- AI command UI ---------------------------------------------------- */
+/* ---- Shared controls ---------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: 500 13px var(--font-ui);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-accept {
+  background: var(--insert-fg);
+  border-color: var(--insert-fg);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-accept:hover:not(:disabled) {
+  border-color: transparent;
+  filter: brightness(1.12);
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.chip {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font: 12px var(--font-ui);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status .is-busy,
+.status.is-busy {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.status .is-error,
+.status.is-error {
+  color: var(--delete-fg);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ---- Floating UI (toolbar, command panel, suggestion card) --------------- */
 
 .ai-anchor {
   position: fixed;
@@ -96,20 +225,15 @@ body,
   border-color: var(--accent);
 }
 
-.ai-hint kbd,
-.ai-command kbd {
-  font: 11px var(--font-ui);
-  color: var(--muted);
-}
-
-.ai-command {
-  width: min(440px, calc(100vw - 16px));
+.ai-command,
+.suggestion-card {
+  width: min(460px, calc(100vw - 16px));
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
-  font: 14px var(--font-ui);
+  box-shadow: var(--shadow);
+  font: 13px var(--font-ui);
 }
 
 .ai-command-row {
@@ -117,50 +241,23 @@ body,
   gap: 6px;
 }
 
-.ai-command-input {
+.ai-command-input,
+.refine-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font: inherit;
-  color: var(--text);
-}
-
-.ai-command-input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-color: var(--accent);
-}
-
-.ai-command button {
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--surface);
-  font: inherit;
-  font-size: 13px;
+  font: 14px var(--font-ui);
   color: var(--text);
-  cursor: pointer;
 }
 
-.ai-command button:hover:not(:disabled) {
+.ai-command-input:focus-visible,
+.refine-input:focus-visible {
+  outline: none;
   border-color: var(--accent);
-  color: var(--accent);
-}
-
-.ai-command button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.ai-command .ai-command-send {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.ai-command .ai-command-send:hover:not(:disabled) {
-  color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .ai-command-actions {
@@ -170,100 +267,34 @@ body,
   margin-top: 8px;
 }
 
-.ai-command-status {
-  margin-top: 8px;
+/* ---- Suggestion card ------------------------------------------------------ */
+
+.suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggestion-round {
+  margin-left: auto;
   font-size: 12px;
   color: var(--muted);
 }
 
-.ai-thinking {
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.ai-error {
-  color: #cf222e;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.4;
-  }
-}
-
-/* ---- Suggestion card -------------------------------------------------- */
-
-.suggestion-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: min(440px, calc(100vw - 16px));
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.1);
-  font: 13px var(--font-ui);
-}
-
-.suggestion-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.suggestion-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  font: 500 13px var(--font-ui);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.suggestion-actions kbd {
-  font: 11px var(--font-ui);
-  opacity: 0.75;
-}
-
-.suggestion-actions .suggestion-accept {
-  background: var(--insert-fg);
-  border-color: var(--insert-fg);
-  color: #fff;
-}
-
-.suggestion-actions .suggestion-accept:hover {
-  filter: brightness(1.1);
-}
-
-.suggestion-actions .suggestion-reject:hover {
-  border-color: var(--delete-fg);
-  color: var(--delete-fg);
-}
-
 .suggestion-note {
-  margin: 0;
+  margin: 8px 0 0;
   color: var(--muted);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .suggestion-card.is-stale .suggestion-note {
   color: var(--delete-fg);
 }
 
-.suggestion-round {
-  align-self: center;
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 /* Refinement: deliberately quieter than Accept / Reject. */
-
 .refine {
-  padding-top: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
@@ -274,53 +305,11 @@ body,
 }
 
 .refine-input {
-  flex: 1;
-  min-width: 120px;
   padding: 4px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: var(--code-bg);
-  font: 13px var(--font-ui);
-  color: var(--text);
+  background: var(--subtle-bg);
+  font-size: 13px;
 }
 
-.refine-input:focus {
-  outline: none;
-  border-color: var(--accent);
+.refine-input:focus-visible {
   background: var(--surface);
-}
-
-.refine-chip {
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  font: 12px var(--font-ui);
-  color: var(--muted);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.refine-chip:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.refine-chip:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.refine-status {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.refine-status.is-busy {
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.refine-status.is-error {
-  color: var(--delete-fg);
 }
